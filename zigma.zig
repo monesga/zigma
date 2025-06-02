@@ -937,7 +937,7 @@ test "expectEqualStrings" {
 test "basic error checking" {
     const dir = std.fs.cwd();
     // _ = dir.openFile("main.zig", .{}); // this will not compile
-    _ = try dir.openFile("main.zig", .{}); // this will compile
+    _ = try dir.openFile("zigma.zig", .{}); // this will compile
 }
 
 const TestError = error{
