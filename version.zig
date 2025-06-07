@@ -1,8 +1,6 @@
 const std = @import("std");
-const SemanticVersion = std.SemanticVersion;
-
-pub const version: SemanticVersion = .{
+pub const version: std.SemanticVersion = .{
     .major = 0,
-    .minor = 1,
+    .minor = 2,
     .patch = 0,
 };
