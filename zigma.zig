@@ -120,8 +120,7 @@ pub fn main() !void {
 }
 
 test "scan empty line" {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    const allocator = gpa.allocator();
+    const allocator = std.testing.allocator;
     var tokens = try scan("", allocator);
     defer tokens.deinit();
     try expectEqual(tokens.items.len, 0);
