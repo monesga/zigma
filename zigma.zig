@@ -99,7 +99,7 @@ fn scan(source: []const u8, allocator: std.mem.Allocator) !std.ArrayList(Token) 
             }
             const slice = source[start..i];
             const value = try std.fmt.parseFloat(f64, slice);
-            try tokens.append(Token{ .start = start, .end = i, .value = value });
+            try tokens.append(Token{ .start = start, .end = i - 1, .value = value });
             continue;
         }
 
@@ -123,5 +123,32 @@ test "scan empty line" {
     const allocator = std.testing.allocator;
     var tokens = try scan("", allocator);
     defer tokens.deinit();
-    try expectEqual(tokens.items.len, 0);
+    try expectEqual(0, tokens.items.len);
+}
+
+test "scan all spaces line" {
+    const allocator = std.testing.allocator;
+    var tokens = try scan("    ", allocator);
+    defer tokens.deinit();
+    try expectEqual(0, tokens.items.len);
+}
+
+test "scan word" {
+    const allocator = std.testing.allocator;
+    var tokens = try scan("hello", allocator);
+    defer tokens.deinit();
+    try expectEqual(1, tokens.items.len);
+    try expectEqual(0, tokens.items[0].start);
+    try expectEqual(4, tokens.items[0].end);
+    try expectEqual(null, tokens.items[0].value);
+}
+
+test "scan integer" {
+    const allocator = std.testing.allocator;
+    var tokens = try scan("1234", allocator);
+    defer tokens.deinit();
+    try expectEqual(1, tokens.items.len);
+    try expectEqual(0, tokens.items[0].start);
+    try expectEqual(3, tokens.items[0].end);
+    try expectEqual(1234.0, tokens.items[0].value);
 }
