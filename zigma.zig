@@ -3,16 +3,17 @@
 // zigma verion 0.0.1 - hierarchical expression calculator
 // parse text expression lines and use hierarchy to compute subtotals
 //
-// usage: zigma [-s | -p | -n | -f | -d] [file] [expression]
+// usage: zigma [-s | -p | -n | -f | -d | -t | -h] [file] [expression]
 //
-// --scan     -s    tokenize and print tokens
-// --parse    -p    parse and print output
-// --no-lines -n    don't produce output lines
-// --filter   -f    filter with children
-// --find     -d    filter without childred
-// --no-color -b    output without colors
-// --no-total -t    don't show file total
-
+// -s    tokenize and print tokens
+// -p    parse and print output
+// -n    don't produce output lines
+// -f    filter with children
+// -d    filter without childred
+// -b    black and white
+// -t    don't show file total
+// -h    show this help message
+//
 const std = @import("std");
 const builtin = @import("builtin");
 const expect = std.testing.expect;
@@ -55,7 +56,7 @@ fn isNumChar(c: u8, hasDot: bool, hasExp: bool) bool {
 // scan a line of source into tokens
 // assumes source already broken down into lines and we scan one
 // line at a time
-fn scan(source: []const u8, allocator: std.mem.Allocator) !std.ArrayList(Token) {
+fn scan_line(source: []const u8, allocator: std.mem.Allocator) !std.ArrayList(Token) {
     var tokens: std.ArrayList(Token) = std.ArrayList(Token).init(allocator);
     // empty line
     if (source.len == 0) {
@@ -140,21 +141,21 @@ pub fn main() !void {
 
 test "scan empty line" {
     const allocator = std.testing.allocator;
-    var tokens = try scan("", allocator);
+    var tokens = try scan_line("", allocator);
     defer tokens.deinit();
     try expectEqual(0, tokens.items.len);
 }
 
 test "scan all spaces line" {
     const allocator = std.testing.allocator;
-    var tokens = try scan("    ", allocator);
+    var tokens = try scan_line("    ", allocator);
     defer tokens.deinit();
     try expectEqual(0, tokens.items.len);
 }
 
 test "scan word" {
     const allocator = std.testing.allocator;
-    var tokens = try scan("hello", allocator);
+    var tokens = try scan_line("hello", allocator);
     defer tokens.deinit();
     try expectEqual(1, tokens.items.len);
     try expectEqual(0, tokens.items[0].start);
@@ -164,7 +165,7 @@ test "scan word" {
 
 test "scan integer" {
     const allocator = std.testing.allocator;
-    var tokens = try scan("1234", allocator);
+    var tokens = try scan_line("1234", allocator);
     defer tokens.deinit();
     try expectEqual(1, tokens.items.len);
     try expectEqual(0, tokens.items[0].start);
@@ -174,7 +175,7 @@ test "scan integer" {
 
 test "scan spaces and word" {
     const allocator = std.testing.allocator;
-    var tokens = try scan("    hello", allocator);
+    var tokens = try scan_line("    hello", allocator);
     defer tokens.deinit();
     try expectEqual(1, tokens.items.len);
     try expectEqual(4, tokens.items[0].start);
@@ -185,7 +186,7 @@ test "scan spaces and word" {
 test "title:12" {
     const allocator = std.testing.allocator;
     const source = "title:12";
-    var tokens = try scan(source, allocator);
+    var tokens = try scan_line(source, allocator);
     defer tokens.deinit();
     try expectEqual(3, tokens.items.len);
     try expectEqual(0, tokens.items[0].start);
@@ -201,7 +202,7 @@ test "title:12" {
 test "x=9.3" {
     const allocator = std.testing.allocator;
     const source = "x=9.3";
-    var tokens = try scan(source, allocator);
+    var tokens = try scan_line(source, allocator);
     defer tokens.deinit();
     try expectEqual(3, tokens.items.len);
     try expectEqual(0, tokens.items[0].start);
@@ -215,7 +216,7 @@ test "x=9.3" {
 test "note: (12.3+4.5)/6.7" {
     const allocator = std.testing.allocator;
     const source = "note: (12.3+4.5)/6.7";
-    var tokens = try scan(source, allocator);
+    var tokens = try scan_line(source, allocator);
     defer tokens.deinit();
     try expectEqual(9, tokens.items.len);
     try expectEqual(0, tokens.items[0].start);
