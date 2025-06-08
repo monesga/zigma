@@ -130,6 +130,36 @@ fn scan_line(source: []const u8, allocator: std.mem.Allocator) !std.ArrayList(To
     return tokens;
 }
 
+fn scan_lines(source: []const u8, allocator: std.mem.Allocator) !std.ArrayList(std.ArrayList(Token)) {
+    var lines: std.ArrayList(std.ArrayList(Token)) = std.ArrayList(std.ArrayList(Token)).init(allocator);
+    var line_start: usize = 0;
+
+    for (source, 0..) |c, i| {
+        if (c == '\n' or c == '\r') {
+            const line = source[line_start..i];
+            const tokens = try scan_line(line, allocator);
+            try lines.append(tokens);
+            line_start = i + 1;
+        }
+    }
+
+    // Handle the last line if it doesn't end with a newline
+    if (line_start < source.len) {
+        const line = source[line_start..];
+        const tokens = try scan_line(line, allocator);
+        try lines.append(tokens);
+    }
+
+    return lines;
+}
+
+fn free_lines(lines: std.ArrayList(std.ArrayList(Token))) void {
+    for (lines.items) |line| {
+        line.deinit();
+    }
+    lines.deinit();
+}
+
 pub fn main() !void {
     const stdout_file = std.io.getStdOut().writer();
     var bw = std.io.bufferedWriter(stdout_file);
@@ -229,4 +259,72 @@ test "note: (12.3+4.5)/6.7" {
     try expectEqual(')', source[tokens.items[6].start]);
     try expectEqual('/', source[tokens.items[7].start]);
     try expectEqual(6.7, tokens.items[8].value);
+}
+
+test "scan_lines with empty string" {
+    const allocator = std.testing.allocator;
+    var lines = try scan_lines("", allocator);
+    defer lines.deinit();
+    try expectEqual(0, lines.items.len);
+}
+
+test "scan_lines with single line" {
+    const allocator = std.testing.allocator;
+    const lines = try scan_lines("hello", allocator);
+    defer free_lines(lines);
+    try expectEqual(1, lines.items.len);
+    try expectEqual(1, lines.items[0].items.len);
+    try expectEqual(0, lines.items[0].items[0].start);
+    try expectEqual(4, lines.items[0].items[0].end);
+    try expectEqual(null, lines.items[0].items[0].value);
+}
+
+test "scan_lines with multiple lines" {
+    const allocator = std.testing.allocator;
+    const source = "line1\nline2\nline3";
+    const lines = try scan_lines(source, allocator);
+    defer free_lines(lines);
+    try expectEqual(3, lines.items.len);
+
+    try expectEqual(1, lines.items[0].items.len);
+    try expectEqual(0, lines.items[0].items[0].start);
+    try expectEqual(4, lines.items[0].items[0].end);
+    try expectEqual(null, lines.items[0].items[0].value);
+
+    try expectEqual(1, lines.items[1].items.len);
+    try expectEqual(0, lines.items[1].items[0].start);
+    try expectEqual(4, lines.items[1].items[0].end);
+    try expectEqual(null, lines.items[1].items[0].value);
+
+    try expectEqual(1, lines.items[2].items.len);
+    try expectEqual(0, lines.items[2].items[0].start);
+    try expectEqual(4, lines.items[2].items[0].end);
+    try expectEqual(null, lines.items[2].items[0].value);
+}
+
+test "scan_lines with some blank lines" {
+    const allocator = std.testing.allocator;
+    const source = "line1\n\nline2\nline3\n\n";
+    const lines = try scan_lines(source, allocator);
+    defer free_lines(lines);
+    try expectEqual(5, lines.items.len);
+
+    try expectEqual(1, lines.items[0].items.len);
+    try expectEqual(0, lines.items[0].items[0].start);
+    try expectEqual(4, lines.items[0].items[0].end);
+    try expectEqual(null, lines.items[0].items[0].value);
+
+    try expectEqual(0, lines.items[1].items.len); // blank line
+
+    try expectEqual(1, lines.items[2].items.len);
+    try expectEqual(0, lines.items[2].items[0].start);
+    try expectEqual(4, lines.items[2].items[0].end);
+    try expectEqual(null, lines.items[2].items[0].value);
+
+    try expectEqual(1, lines.items[3].items.len);
+    try expectEqual(0, lines.items[3].items[0].start);
+    try expectEqual(4, lines.items[3].items[0].end);
+    try expectEqual(null, lines.items[3].items[0].value);
+
+    try expectEqual(0, lines.items[4].items.len); // blank line
 }
