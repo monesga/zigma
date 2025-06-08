@@ -160,6 +160,60 @@ fn free_lines(lines: std.ArrayList(std.ArrayList(Token))) void {
     lines.deinit();
 }
 
+const Theme = enum { mono, light, dark };
+
+fn print_line(
+    stdout: anytype,
+    source: []const u8,
+    line: std.ArrayList(Token),
+    theme: Theme,
+) !void {
+    const reset_color: []const u8 = switch (theme) {
+        .mono => "",
+        .light => "\x1b[0m",
+        .dark => "\x1b[0m",
+    };
+    const word_color: []const u8 = switch (theme) {
+        .mono => "",
+        .light => "\x1b[37m",
+        .dark => "\x1b[90m",
+    };
+    const number_color: []const u8 = switch (theme) {
+        .mono => "",
+        .light => "\x1b[32m",
+        .dark => "\x1b[92m",
+    };
+    const punctuator_color: []const u8 = switch (theme) {
+        .mono => "",
+        .light => "\x1b[34m",
+        .dark => "\x1b[94m",
+    };
+
+    var current: u16 = 0;
+    for (line.items) |token| {
+        // print spaces before the token
+        if (token.start > current) {
+            const spaces = source[current..token.start];
+            try stdout.print("{s}", .{spaces});
+        }
+        current = token.end + 1;
+        // print the token
+        const word = source[token.start .. token.end + 1];
+        const start_char = word[0];
+        if (isAlpha(start_char)) {
+            try stdout.print("{s}", .{word_color});
+        } else if (isNum(start_char)) {
+            try stdout.print("{s}", .{number_color});
+        } else if (isPunctuator(start_char)) {
+            try stdout.print("{s}", .{punctuator_color});
+        } else {
+            return ScanError.UnexpectedCharacter;
+        }
+        try stdout.print("{s}{s}", .{ word, reset_color });
+    }
+    try stdout.print("\n", .{});
+}
+
 pub fn main() !void {
     const stdout_file = std.io.getStdOut().writer();
     var bw = std.io.bufferedWriter(stdout_file);
@@ -327,4 +381,46 @@ test "scan_lines with some blank lines" {
     try expectEqual(null, lines.items[3].items[0].value);
 
     try expectEqual(0, lines.items[4].items.len); // blank line
+}
+
+test "print_line with empty line" {
+    const allocator = std.testing.allocator;
+    const source = "";
+    var tokens = try scan_line(source, allocator);
+    defer tokens.deinit();
+
+    var buffer = std.ArrayList(u8).init(allocator);
+    defer buffer.deinit();
+    try print_line(buffer.writer(), source, tokens, .light);
+
+    try expectEqual(1, buffer.items.len);
+    try expectEqual('\n', buffer.items[0]);
+}
+
+test "print_line with colored output" {
+    const allocator = std.testing.allocator;
+    const source = "hello:123";
+    var tokens = try scan_line(source, allocator);
+    defer tokens.deinit();
+
+    var buffer = std.ArrayList(u8).init(allocator);
+    defer buffer.deinit();
+    try print_line(buffer.writer(), source, tokens, .light);
+
+    const expected = "\x1b[37mhello\x1b[0m\x1b[34m:\x1b[0m\x1b[32m123\x1b[0m\n";
+    try std.testing.expectEqualStrings(expected, buffer.items);
+}
+
+test "print_line with mono theme" {
+    const allocator = std.testing.allocator;
+    const source = "hello:123";
+    var tokens = try scan_line(source, allocator);
+    defer tokens.deinit();
+
+    var buffer = std.ArrayList(u8).init(allocator);
+    defer buffer.deinit();
+    try print_line(buffer.writer(), source, tokens, .mono);
+
+    const expected = "hello:123\n";
+    try std.testing.expectEqualStrings(expected, buffer.items);
 }
