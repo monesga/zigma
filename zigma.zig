@@ -197,3 +197,35 @@ test "title:12" {
     try expectEqual(7, tokens.items[2].end);
     try expectEqual(12.0, tokens.items[2].value);
 }
+
+test "x=9.3" {
+    const allocator = std.testing.allocator;
+    const source = "x=9.3";
+    var tokens = try scan(source, allocator);
+    defer tokens.deinit();
+    try expectEqual(3, tokens.items.len);
+    try expectEqual(0, tokens.items[0].start);
+    try expectEqual(0, tokens.items[0].end);
+    try expectEqual(null, tokens.items[0].value);
+    try expectEqual(1, tokens.items[1].start);
+    try expectEqual(1, tokens.items[1].end);
+    try expectEqual(9.3, tokens.items[2].value);
+}
+
+test "note: (12.3+4.5)/6.7" {
+    const allocator = std.testing.allocator;
+    const source = "note: (12.3+4.5)/6.7";
+    var tokens = try scan(source, allocator);
+    defer tokens.deinit();
+    try expectEqual(9, tokens.items.len);
+    try expectEqual(0, tokens.items[0].start);
+    try expectEqual(3, tokens.items[0].end);
+    try expectEqual(':', source[tokens.items[1].start]);
+    try expectEqual('(', source[tokens.items[2].start]);
+    try expectEqual(12.3, tokens.items[3].value);
+    try expectEqual('+', source[tokens.items[4].start]);
+    try expectEqual(4.5, tokens.items[5].value);
+    try expectEqual(')', source[tokens.items[6].start]);
+    try expectEqual('/', source[tokens.items[7].start]);
+    try expectEqual(6.7, tokens.items[8].value);
+}
