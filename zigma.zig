@@ -36,7 +36,20 @@ fn isSpace(c: u8) bool {
 }
 
 fn isPunctuator(c: u8) bool {
-    return c == ':' or c == '=';
+    return c == ':' or c == '=' or c == '(' or c == ')' or c == '+' or c == '-' or c == '/' or c == '*';
+}
+
+fn isNumChar(c: u8, hasDot: bool, hasExp: bool) bool {
+    if (c >= '0' and c <= '9') {
+        return true;
+    }
+    if (c == '.' and !hasDot) {
+        return true;
+    }
+    if ((c == 'e' or c == 'E') and !hasExp) {
+        return true;
+    }
+    return false;
 }
 
 // scan a line of source into tokens
@@ -62,7 +75,7 @@ fn scan(source: []const u8, allocator: std.mem.Allocator) !std.ArrayList(Token) 
 
         // punctuators
         if (isPunctuator(c)) {
-            try tokens.append(Token{ .start = i, .end = i + 1, .value = null });
+            try tokens.append(Token{ .start = i, .end = i, .value = null });
             continue;
         }
 
@@ -70,10 +83,14 @@ fn scan(source: []const u8, allocator: std.mem.Allocator) !std.ArrayList(Token) 
         if (isAlpha(c)) {
             const start = i;
             c = source[i];
-            while (i < source.len and (isAlpha(c) or isNum(c))) : (i += 1) {
+            while (i < source.len) : (i += 1) {
                 c = source[i];
+                if (!isAlpha(c) and !isNum(c)) {
+                    break;
+                }
             }
             try tokens.append(Token{ .start = start, .end = i - 1, .value = null });
+            i -= 1; // adjust for the loop increment
             continue;
         }
 
@@ -82,8 +99,9 @@ fn scan(source: []const u8, allocator: std.mem.Allocator) !std.ArrayList(Token) 
 
             var hasDot = false;
             var hasExp = false;
-            while (isNum(c) or (c == '.' and !hasDot) or ((c == 'e' or c == 'E') and !hasExp)) : (i += 1) {
-                if (i >= source.len) {
+            while (i < source.len) : (i += 1) {
+                c = source[i];
+                if (!isNumChar(c, hasDot, hasExp)) {
                     break;
                 }
 
@@ -100,6 +118,7 @@ fn scan(source: []const u8, allocator: std.mem.Allocator) !std.ArrayList(Token) 
             const slice = source[start..i];
             const value = try std.fmt.parseFloat(f64, slice);
             try tokens.append(Token{ .start = start, .end = i - 1, .value = value });
+            i -= 1; // adjust for the loop increment
             continue;
         }
 
@@ -151,4 +170,30 @@ test "scan integer" {
     try expectEqual(0, tokens.items[0].start);
     try expectEqual(3, tokens.items[0].end);
     try expectEqual(1234.0, tokens.items[0].value);
+}
+
+test "scan spaces and word" {
+    const allocator = std.testing.allocator;
+    var tokens = try scan("    hello", allocator);
+    defer tokens.deinit();
+    try expectEqual(1, tokens.items.len);
+    try expectEqual(4, tokens.items[0].start);
+    try expectEqual(8, tokens.items[0].end);
+    try expectEqual(null, tokens.items[0].value);
+}
+
+test "title:12" {
+    const allocator = std.testing.allocator;
+    const source = "title:12";
+    var tokens = try scan(source, allocator);
+    defer tokens.deinit();
+    try expectEqual(3, tokens.items.len);
+    try expectEqual(0, tokens.items[0].start);
+    try expectEqual(4, tokens.items[0].end);
+    try expectEqual(null, tokens.items[0].value);
+    try expectEqual(5, tokens.items[1].start);
+    try expectEqual(5, tokens.items[1].end);
+    try expectEqual(6, tokens.items[2].start);
+    try expectEqual(7, tokens.items[2].end);
+    try expectEqual(12.0, tokens.items[2].value);
 }
