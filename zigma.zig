@@ -56,7 +56,7 @@ fn isNumChar(c: u8, hasDot: bool, hasExp: bool) bool {
 // scan a line of source into tokens
 // assumes source already broken down into lines and we scan one
 // line at a time
-fn scan_line(source: []const u8, allocator: std.mem.Allocator) !std.ArrayList(Token) {
+fn scan_line(source: []const u8, offset: u16, allocator: std.mem.Allocator) !std.ArrayList(Token) {
     var tokens: std.ArrayList(Token) = std.ArrayList(Token).init(allocator);
     // empty line
     if (source.len == 0) {
@@ -76,7 +76,7 @@ fn scan_line(source: []const u8, allocator: std.mem.Allocator) !std.ArrayList(To
 
         // punctuators
         if (isPunctuator(c)) {
-            try tokens.append(Token{ .start = i, .end = i, .value = null });
+            try tokens.append(Token{ .start = offset + i, .end = offset + i, .value = null });
             continue;
         }
 
@@ -90,7 +90,7 @@ fn scan_line(source: []const u8, allocator: std.mem.Allocator) !std.ArrayList(To
                     break;
                 }
             }
-            try tokens.append(Token{ .start = start, .end = i - 1, .value = null });
+            try tokens.append(Token{ .start = offset + start, .end = offset + i - 1, .value = null });
             i -= 1; // adjust for the loop increment
             continue;
         }
@@ -118,7 +118,7 @@ fn scan_line(source: []const u8, allocator: std.mem.Allocator) !std.ArrayList(To
             }
             const slice = source[start..i];
             const value = try std.fmt.parseFloat(f64, slice);
-            try tokens.append(Token{ .start = start, .end = i - 1, .value = value });
+            try tokens.append(Token{ .start = offset + start, .end = offset + i - 1, .value = value });
             i -= 1; // adjust for the loop increment
             continue;
         }
@@ -137,7 +137,8 @@ fn scan_lines(source: []const u8, allocator: std.mem.Allocator) !std.ArrayList(s
     for (source, 0..) |c, i| {
         if (c == '\n' or c == '\r') {
             const line = source[line_start..i];
-            const tokens = try scan_line(line, allocator);
+            const offset: u16 = @intCast(line_start);
+            const tokens = try scan_line(line, offset, allocator);
             try lines.append(tokens);
             line_start = i + 1;
         }
@@ -146,7 +147,8 @@ fn scan_lines(source: []const u8, allocator: std.mem.Allocator) !std.ArrayList(s
     // Handle the last line if it doesn't end with a newline
     if (line_start < source.len) {
         const line = source[line_start..];
-        const tokens = try scan_line(line, allocator);
+        const offset: u16 = @intCast(line_start);
+        const tokens = try scan_line(line, offset, allocator);
         try lines.append(tokens);
     }
 
@@ -166,6 +168,7 @@ fn print_line(
     stdout: anytype,
     source: []const u8,
     line: std.ArrayList(Token),
+    line_start: u16,
     theme: Theme,
 ) !void {
     const reset_color: []const u8 = switch (theme) {
@@ -189,7 +192,7 @@ fn print_line(
         .dark => "\x1b[94m",
     };
 
-    var current: u16 = 0;
+    var current: u16 = line_start;
     for (line.items) |token| {
         // print spaces before the token
         if (token.start > current) {
@@ -214,6 +217,64 @@ fn print_line(
     try stdout.print("\n", .{});
 }
 
+fn print_lines(
+    stdout: anytype,
+    source: []const u8,
+    lines: std.ArrayList(std.ArrayList(Token)),
+    show_line_numbers: bool,
+    theme: Theme,
+) !void {
+    const reset_color: []const u8 = switch (theme) {
+        .mono => "",
+        .light => "\x1b[0m",
+        .dark => "\x1b[0m",
+    };
+    const line_color = switch (theme) {
+        .mono => "",
+        .light => "\x1b[90m",
+        .dark => "\x1b[90m",
+    };
+
+    const numLines: i32 = @intCast(lines.items.len);
+    const count: f32 = @floatFromInt(numLines);
+    const digits = if (count == 0) 1 else @log10(count) + 1;
+
+    var line_start: usize = 0;
+    for (lines.items, 0..) |line, i| {
+        if (show_line_numbers) {
+            // print n spaces before the line number
+            const ln: i32 = @intCast(i + 1);
+            const f: f32 = @floatFromInt(ln);
+            const lineWidth = @log10(f) + 1;
+            const gap = digits - lineWidth;
+            const ss: usize = @intCast(@as(i32, @intFromFloat(gap)));
+            for (0..ss) |_| {
+                try stdout.print(" ", .{});
+            }
+            const line_number = i + 1;
+            try stdout.print("{s}{d}{s} ", .{ line_color, line_number, reset_color });
+        }
+        if (line.items.len == 0) {
+            try stdout.print("\n", .{});
+            line_start += 1; // account for the newline
+            continue;
+        }
+
+        const start: u16 = @intCast(line_start);
+        try print_line(stdout, source, line, start, theme);
+
+        // Find the end of this line to calculate next line_start
+        var end = line_start;
+        while (end < source.len and source[end] != '\n' and source[end] != '\r') {
+            end += 1;
+        }
+        if (end < source.len) {
+            end += 1; // skip the newline
+        }
+        line_start = end;
+    }
+}
+
 pub fn main() !void {
     const stdout_file = std.io.getStdOut().writer();
     var bw = std.io.bufferedWriter(stdout_file);
@@ -225,21 +286,21 @@ pub fn main() !void {
 
 test "scan empty line" {
     const allocator = std.testing.allocator;
-    var tokens = try scan_line("", allocator);
+    var tokens = try scan_line("", 0, allocator);
     defer tokens.deinit();
     try expectEqual(0, tokens.items.len);
 }
 
 test "scan all spaces line" {
     const allocator = std.testing.allocator;
-    var tokens = try scan_line("    ", allocator);
+    var tokens = try scan_line("    ", 0, allocator);
     defer tokens.deinit();
     try expectEqual(0, tokens.items.len);
 }
 
 test "scan word" {
     const allocator = std.testing.allocator;
-    var tokens = try scan_line("hello", allocator);
+    var tokens = try scan_line("hello", 0, allocator);
     defer tokens.deinit();
     try expectEqual(1, tokens.items.len);
     try expectEqual(0, tokens.items[0].start);
@@ -249,7 +310,7 @@ test "scan word" {
 
 test "scan integer" {
     const allocator = std.testing.allocator;
-    var tokens = try scan_line("1234", allocator);
+    var tokens = try scan_line("1234", 0, allocator);
     defer tokens.deinit();
     try expectEqual(1, tokens.items.len);
     try expectEqual(0, tokens.items[0].start);
@@ -259,7 +320,7 @@ test "scan integer" {
 
 test "scan spaces and word" {
     const allocator = std.testing.allocator;
-    var tokens = try scan_line("    hello", allocator);
+    var tokens = try scan_line("    hello", 0, allocator);
     defer tokens.deinit();
     try expectEqual(1, tokens.items.len);
     try expectEqual(4, tokens.items[0].start);
@@ -270,7 +331,7 @@ test "scan spaces and word" {
 test "title:12" {
     const allocator = std.testing.allocator;
     const source = "title:12";
-    var tokens = try scan_line(source, allocator);
+    var tokens = try scan_line(source, 0, allocator);
     defer tokens.deinit();
     try expectEqual(3, tokens.items.len);
     try expectEqual(0, tokens.items[0].start);
@@ -286,7 +347,7 @@ test "title:12" {
 test "x=9.3" {
     const allocator = std.testing.allocator;
     const source = "x=9.3";
-    var tokens = try scan_line(source, allocator);
+    var tokens = try scan_line(source, 0, allocator);
     defer tokens.deinit();
     try expectEqual(3, tokens.items.len);
     try expectEqual(0, tokens.items[0].start);
@@ -300,7 +361,7 @@ test "x=9.3" {
 test "note: (12.3+4.5)/6.7" {
     const allocator = std.testing.allocator;
     const source = "note: (12.3+4.5)/6.7";
-    var tokens = try scan_line(source, allocator);
+    var tokens = try scan_line(source, 0, allocator);
     defer tokens.deinit();
     try expectEqual(9, tokens.items.len);
     try expectEqual(0, tokens.items[0].start);
@@ -346,13 +407,13 @@ test "scan_lines with multiple lines" {
     try expectEqual(null, lines.items[0].items[0].value);
 
     try expectEqual(1, lines.items[1].items.len);
-    try expectEqual(0, lines.items[1].items[0].start);
-    try expectEqual(4, lines.items[1].items[0].end);
+    try expectEqual(6, lines.items[1].items[0].start);
+    try expectEqual(10, lines.items[1].items[0].end);
     try expectEqual(null, lines.items[1].items[0].value);
 
     try expectEqual(1, lines.items[2].items.len);
-    try expectEqual(0, lines.items[2].items[0].start);
-    try expectEqual(4, lines.items[2].items[0].end);
+    try expectEqual(12, lines.items[2].items[0].start);
+    try expectEqual(16, lines.items[2].items[0].end);
     try expectEqual(null, lines.items[2].items[0].value);
 }
 
@@ -371,13 +432,13 @@ test "scan_lines with some blank lines" {
     try expectEqual(0, lines.items[1].items.len); // blank line
 
     try expectEqual(1, lines.items[2].items.len);
-    try expectEqual(0, lines.items[2].items[0].start);
-    try expectEqual(4, lines.items[2].items[0].end);
+    try expectEqual(7, lines.items[2].items[0].start);
+    try expectEqual(11, lines.items[2].items[0].end);
     try expectEqual(null, lines.items[2].items[0].value);
 
     try expectEqual(1, lines.items[3].items.len);
-    try expectEqual(0, lines.items[3].items[0].start);
-    try expectEqual(4, lines.items[3].items[0].end);
+    try expectEqual(13, lines.items[3].items[0].start);
+    try expectEqual(17, lines.items[3].items[0].end);
     try expectEqual(null, lines.items[3].items[0].value);
 
     try expectEqual(0, lines.items[4].items.len); // blank line
@@ -386,12 +447,12 @@ test "scan_lines with some blank lines" {
 test "print_line with empty line" {
     const allocator = std.testing.allocator;
     const source = "";
-    var tokens = try scan_line(source, allocator);
+    var tokens = try scan_line(source, 0, allocator);
     defer tokens.deinit();
 
     var buffer = std.ArrayList(u8).init(allocator);
     defer buffer.deinit();
-    try print_line(buffer.writer(), source, tokens, .light);
+    try print_line(buffer.writer(), source, tokens, 0, .light);
 
     try expectEqual(1, buffer.items.len);
     try expectEqual('\n', buffer.items[0]);
@@ -400,12 +461,12 @@ test "print_line with empty line" {
 test "print_line with colored output" {
     const allocator = std.testing.allocator;
     const source = "hello:123";
-    var tokens = try scan_line(source, allocator);
+    var tokens = try scan_line(source, 0, allocator);
     defer tokens.deinit();
 
     var buffer = std.ArrayList(u8).init(allocator);
     defer buffer.deinit();
-    try print_line(buffer.writer(), source, tokens, .light);
+    try print_line(buffer.writer(), source, tokens, 0, .light);
 
     const expected = "\x1b[37mhello\x1b[0m\x1b[34m:\x1b[0m\x1b[32m123\x1b[0m\n";
     try std.testing.expectEqualStrings(expected, buffer.items);
@@ -414,13 +475,27 @@ test "print_line with colored output" {
 test "print_line with mono theme" {
     const allocator = std.testing.allocator;
     const source = "hello:123";
-    var tokens = try scan_line(source, allocator);
+    var tokens = try scan_line(source, 0, allocator);
     defer tokens.deinit();
 
     var buffer = std.ArrayList(u8).init(allocator);
     defer buffer.deinit();
-    try print_line(buffer.writer(), source, tokens, .mono);
+    try print_line(buffer.writer(), source, tokens, 0, .mono);
 
     const expected = "hello:123\n";
+    try std.testing.expectEqualStrings(expected, buffer.items);
+}
+
+test "print_lines with empty lines" {
+    const allocator = std.testing.allocator;
+    const source = "word1\n\nword2";
+    const lines = try scan_lines(source, allocator);
+    defer free_lines(lines);
+
+    var buffer = std.ArrayList(u8).init(allocator);
+    defer buffer.deinit();
+    try print_lines(buffer.writer(), source, lines, true, .mono);
+
+    const expected = "1 word1\n2 \n3 word2\n";
     try std.testing.expectEqualStrings(expected, buffer.items);
 }
