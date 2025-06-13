@@ -300,6 +300,41 @@ fn parseArgs(args: []const []const u8) ParseResult {
     return ParseResult{ .run = options };
 }
 
+fn run(options: Options, stdout: anytype, allocator: std.mem.Allocator) !void {
+    if (options.scan_only) {
+        var text: []const u8 = "";
+        var should_free = false;
+        
+        if (options.file_name.len > 0) {
+            // Load text from file
+            const file = std.fs.cwd().openFile(options.file_name, .{}) catch |err| {
+                try stdout.print("Error opening file '{s}': {}\n", .{ options.file_name, err });
+                return;
+            };
+            defer file.close();
+            
+            const file_size = try file.getEndPos();
+            const contents = try allocator.alloc(u8, file_size);
+            _ = try file.readAll(contents);
+            text = contents;
+            should_free = true;
+        } else if (options.expression.len > 0) {
+            text = options.expression;
+        } else {
+            // No file and no expression, exit
+            return;
+        }
+        
+        defer if (should_free) allocator.free(text);
+        
+        // Run scan_lines and print_tokens
+        const lines = try scan_lines(text, allocator);
+        defer free_lines(lines);
+        
+        try print_lines(stdout, text, lines, true, options.theme);
+    }
+}
+
 fn print_help(stdout: anytype) !void {
     try stdout.print("Zigma version {d}.{d}.{d} - hierarchical expression calculator\n", .{ VER.major, VER.minor, VER.patch });
     try stdout.print("parse text expression lines and use hierarchy to compute subtotals\n\n", .{});
@@ -328,9 +363,7 @@ pub fn main() !void {
             return;
         },
         .run => |options| {
-            _ = options; // unused for now
-            try stdout.print("zigma version {d}.{d}.{d}.\n", .{ VER.major, VER.minor, VER.patch });
-            try stdout.print("stderr: initialized\n", .{});
+            try run(options, stdout, allocator);
             try bw.flush();
         },
     }

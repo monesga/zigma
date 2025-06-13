@@ -1,3 +1,5 @@
 .zig-cache/
 zig-out/
 *.o
+fin25.txt
+*.zig.o
