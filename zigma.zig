@@ -275,10 +275,34 @@ fn print_lines(
     }
 }
 
+fn print_help(stdout: anytype) !void {
+    try stdout.print("Zigma version {d}.{d}.{d} - hierarchical expression calculator\n", .{ VER.major, VER.minor, VER.patch });
+    try stdout.print("parse text expression lines and use hierarchy to compute subtotals\n\n", .{});
+    try stdout.print("usage: zigma [-s | -p | -n | -f | -d | -t | -h] [file] [expression]\n\n", .{});
+    try stdout.print("-h    show this help message\n", .{});
+}
+
 pub fn main() !void {
     const stdout_file = std.io.getStdOut().writer();
     var bw = std.io.bufferedWriter(stdout_file);
     const stdout = bw.writer();
+
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+
+    const args = try std.process.argsAlloc(allocator);
+    defer std.process.argsFree(allocator, args);
+
+    // Check for help flag
+    for (args[1..]) |arg| {
+        if (std.mem.eql(u8, arg, "-h") or std.mem.eql(u8, arg, "--help")) {
+            try print_help(stdout);
+            try bw.flush();
+            return;
+        }
+    }
+
     try stdout.print("zigma version {d}.{d}.{d}.\n", .{ VER.major, VER.minor, VER.patch });
     try bw.flush();
     std.debug.print("stderr: initialized\n", .{});
