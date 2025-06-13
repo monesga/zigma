@@ -330,8 +330,8 @@ pub fn main() !void {
         .run => |options| {
             _ = options; // unused for now
             try stdout.print("zigma version {d}.{d}.{d}.\n", .{ VER.major, VER.minor, VER.patch });
+            try stdout.print("stderr: initialized\n", .{});
             try bw.flush();
-            std.debug.print("stderr: initialized\n", .{});
         },
     }
 }
