@@ -1,24 +1,20 @@
-// $ zigma -h
 //
 // zigma verion 0.0.1 - hierarchical expression calculator
 // parse text expression lines and use hierarchy to compute subtotals
-//
-// usage: zigma [-s | -p | -n | -f | -d | -t | -h] [file] [expression]
-//
-// -s    tokenize and print tokens
-// -p    parse and print output
-// -n    don't produce output lines
-// -f    filter with children
-// -d    filter without childred
-// -b    black and white
-// -t    don't show file total
-// -h    show this help message
 //
 const std = @import("std");
 const builtin = @import("builtin");
 const expect = std.testing.expect;
 const expectEqual = std.testing.expectEqual;
 const VER = @import("version.zig").version;
+
+const Theme = enum { mono, light, dark };
+
+const Options = struct {
+    file_name: []const u8 = "",
+    expression: []const u8 = "",
+    theme: Theme = .mono,
+};
 
 const Token = struct { start: u16, end: u16, value: ?f64 };
 
@@ -162,8 +158,6 @@ fn free_lines(lines: std.ArrayList(std.ArrayList(Token))) void {
     lines.deinit();
 }
 
-const Theme = enum { mono, light, dark };
-
 fn print_line(
     stdout: anytype,
     source: []const u8,
@@ -275,6 +269,22 @@ fn print_lines(
     }
 }
 
+const ParseResult = union(enum) {
+    help: void,
+    run: Options,
+};
+
+fn parseArgs(args: []const []const u8) ParseResult {
+    // Check for help flag
+    for (args[1..]) |arg| {
+        if (std.mem.eql(u8, arg, "-h") or std.mem.eql(u8, arg, "--help")) {
+            return ParseResult.help;
+        }
+    }
+
+    return ParseResult{ .run = Options{} };
+}
+
 fn print_help(stdout: anytype) !void {
     try stdout.print("Zigma version {d}.{d}.{d} - hierarchical expression calculator\n", .{ VER.major, VER.minor, VER.patch });
     try stdout.print("parse text expression lines and use hierarchy to compute subtotals\n\n", .{});
@@ -294,18 +304,20 @@ pub fn main() !void {
     const args = try std.process.argsAlloc(allocator);
     defer std.process.argsFree(allocator, args);
 
-    // Check for help flag
-    for (args[1..]) |arg| {
-        if (std.mem.eql(u8, arg, "-h") or std.mem.eql(u8, arg, "--help")) {
+    const parse_result = parseArgs(args);
+    switch (parse_result) {
+        .help => {
             try print_help(stdout);
             try bw.flush();
             return;
-        }
+        },
+        .run => |options| {
+            _ = options; // unused for now
+            try stdout.print("zigma version {d}.{d}.{d}.\n", .{ VER.major, VER.minor, VER.patch });
+            try bw.flush();
+            std.debug.print("stderr: initialized\n", .{});
+        },
     }
-
-    try stdout.print("zigma version {d}.{d}.{d}.\n", .{ VER.major, VER.minor, VER.patch });
-    try bw.flush();
-    std.debug.print("stderr: initialized\n", .{});
 }
 
 test "scan empty line" {
@@ -522,4 +534,44 @@ test "print_lines with empty lines" {
 
     const expected = "1 word1\n2 \n3 word2\n";
     try std.testing.expectEqualStrings(expected, buffer.items);
+}
+
+test "parseArgs with no arguments" {
+    const args = [_][]const u8{"zigma"};
+    const result = parseArgs(&args);
+    switch (result) {
+        .run => |options| {
+            try std.testing.expectEqualStrings("", options.file_name);
+            try std.testing.expectEqualStrings("", options.expression);
+            try std.testing.expectEqual(Theme.mono, options.theme);
+        },
+        .help => try std.testing.expect(false), // Should not be help
+    }
+}
+
+test "parseArgs with -h flag" {
+    const args = [_][]const u8{ "zigma", "-h" };
+    const result = parseArgs(&args);
+    switch (result) {
+        .help => {}, // Expected
+        .run => try std.testing.expect(false), // Should not be run
+    }
+}
+
+test "parseArgs with --help flag" {
+    const args = [_][]const u8{ "zigma", "--help" };
+    const result = parseArgs(&args);
+    switch (result) {
+        .help => {}, // Expected
+        .run => try std.testing.expect(false), // Should not be run
+    }
+}
+
+test "parseArgs with help flag among other args" {
+    const args = [_][]const u8{ "zigma", "file.txt", "-h", "expression" };
+    const result = parseArgs(&args);
+    switch (result) {
+        .help => {}, // Expected - help flag should take precedence
+        .run => try std.testing.expect(false), // Should not be run
+    }
 }
