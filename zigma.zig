@@ -14,7 +14,7 @@ const Options = struct {
     file_name: []const u8 = "",
     expression: []const u8 = "",
     theme: Theme = .mono,
-    tokenize_only: bool = false,
+    scan_only: bool = false,
 };
 
 const Token = struct { start: u16, end: u16, value: ?f64 };
@@ -281,8 +281,8 @@ fn parseArgs(args: []const []const u8) ParseResult {
     for (args[1..]) |arg| {
         if (std.mem.eql(u8, arg, "-h") or std.mem.eql(u8, arg, "--help")) {
             return ParseResult.help;
-        } else if (std.mem.eql(u8, arg, "-t") or std.mem.eql(u8, arg, "--tokenize")) {
-            options.tokenize_only = true;
+        } else if (std.mem.eql(u8, arg, "-s") or std.mem.eql(u8, arg, "--scan")) {
+            options.scan_only = true;
         } else if (arg.len > 0 and arg[0] == '-') {
             // Skip other flag arguments
             continue;
@@ -303,8 +303,8 @@ fn parseArgs(args: []const []const u8) ParseResult {
 fn print_help(stdout: anytype) !void {
     try stdout.print("Zigma version {d}.{d}.{d} - hierarchical expression calculator\n", .{ VER.major, VER.minor, VER.patch });
     try stdout.print("parse text expression lines and use hierarchy to compute subtotals\n\n", .{});
-    try stdout.print("usage: zigma [-s | -p | -n | -f | -d | -t | -h] [file] [expression]\n\n", .{});
-    try stdout.print("-t    tokenize only (show tokens without evaluation)\n", .{});
+    try stdout.print("usage: zigma [-s | -p | -n | -f | -d | -h] [file] [expression]\n\n", .{});
+    try stdout.print("-s    scan only (show tokens without evaluation)\n", .{});
     try stdout.print("-h    show this help message\n", .{});
 }
 
@@ -622,12 +622,12 @@ test "parseArgs with expression" {
     }
 }
 
-test "parseArgs with -t flag" {
-    const args = [_][]const u8{ "zigma", "-t" };
+test "parseArgs with -s flag" {
+    const args = [_][]const u8{ "zigma", "-s" };
     const result = parseArgs(&args);
     switch (result) {
         .run => |options| {
-            try std.testing.expectEqual(true, options.tokenize_only);
+            try std.testing.expectEqual(true, options.scan_only);
             try std.testing.expectEqualStrings("", options.file_name);
             try std.testing.expectEqualStrings("", options.expression);
         },
@@ -635,12 +635,12 @@ test "parseArgs with -t flag" {
     }
 }
 
-test "parseArgs with --tokenize flag" {
-    const args = [_][]const u8{ "zigma", "--tokenize" };
+test "parseArgs with --scan flag" {
+    const args = [_][]const u8{ "zigma", "--scan" };
     const result = parseArgs(&args);
     switch (result) {
         .run => |options| {
-            try std.testing.expectEqual(true, options.tokenize_only);
+            try std.testing.expectEqual(true, options.scan_only);
             try std.testing.expectEqualStrings("", options.file_name);
             try std.testing.expectEqualStrings("", options.expression);
         },
@@ -648,12 +648,12 @@ test "parseArgs with --tokenize flag" {
     }
 }
 
-test "parseArgs with -t flag and expression" {
-    const args = [_][]const u8{ "zigma", "-t", "2+2*3" };
+test "parseArgs with -s flag and expression" {
+    const args = [_][]const u8{ "zigma", "-s", "2+2*3" };
     const result = parseArgs(&args);
     switch (result) {
         .run => |options| {
-            try std.testing.expectEqual(true, options.tokenize_only);
+            try std.testing.expectEqual(true, options.scan_only);
             try std.testing.expectEqualStrings("", options.file_name);
             try std.testing.expectEqualStrings("2+2*3", options.expression);
         },
